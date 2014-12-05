@@ -1,0 +1,20 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 11.00
+# Atmel Studio Solution File, Format Version 11.00
+Project("{E66E83B9-2572-4076-B26E-6BE79FF3018A}") = "quad_arduino", "Sketch1\quad_arduino.cppproj", "{390D1872-BE9D-4C7C-9C49-461F89612FAF}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|AVR = Debug|AVR
+		Release|AVR = Release|AVR
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{390D1872-BE9D-4C7C-9C49-461F89612FAF}.Debug|AVR.ActiveCfg = Debug|AVR
+		{390D1872-BE9D-4C7C-9C49-461F89612FAF}.Debug|AVR.Build.0 = Debug|AVR
+		{390D1872-BE9D-4C7C-9C49-461F89612FAF}.Release|AVR.ActiveCfg = Release|AVR
+		{390D1872-BE9D-4C7C-9C49-461F89612FAF}.Release|AVR.Build.0 = Release|AVR
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
