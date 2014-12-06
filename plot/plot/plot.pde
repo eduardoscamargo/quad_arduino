@@ -22,7 +22,7 @@ void setup() {
     smooth();
     println(Serial.list());
     String portName = Serial.list()[0];
-    port = new Serial(this, portName, 9600);
+    port = new Serial(this, portName, 57600);
     port.write('r');
 }
 
