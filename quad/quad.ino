@@ -1,14 +1,29 @@
 #include <PID_v1.h>
 
-int ch1 = 2;
-int ch2 = 3;
-int ch3 = 4;
-int ch4 = 5;
-int ch5 = 6;
-int ch6 = 7;
+void telemetry();
+void readRC();
 
-int motor1 = 8;
+#define DEBUG
+#ifdef DEBUG
+#define D(X) X
+#else
+#define D(X)
+#endif
 
+#ifdef DEBUG
+long tmBegin;
+long tmEnd;
+#endif
+
+/* Definição dos canais de entrada */
+int CH1 = 2; /* Roll (horizontal da direita) */
+int CH2 = 3; /* Pitch (vertical da direita) */
+int CH3 = 4; /* Throttle (vertical da esquerda) */
+int CH4 = 5; /* Yaw (horizontal da esquerda */
+int CH5 = 6; /* ON/OFF */
+int CH6 = 7; /* Dimmer */
+
+/* Voltagem de leitura dos canais do controle */
 unsigned long ch1v;
 unsigned long ch2v;
 unsigned long ch3v;
@@ -16,42 +31,76 @@ unsigned long ch4v;
 unsigned long ch5v;
 unsigned long ch6v;
 
-double Setpoint, Input, Output;
+double setpoint, input, output;
 
-PID myPID(&Input, &Output, &Setpoint,1,2,3, DIRECT);
+PID myPID(&input, &output, &setpoint,1,2,3, DIRECT);
 
 void setup()
-{
-  pinMode(ch1, INPUT);
-  pinMode(ch2, INPUT);
-  pinMode(ch3, INPUT);
-  pinMode(ch4, INPUT);
-  pinMode(ch5, INPUT);
-  pinMode(ch6, INPUT);
-  
-  Input = analogRead(0);
-  Setpoint = 1500;
-  
+{  
+  pinMode(CH1, INPUT);
+  pinMode(CH2, INPUT);
+  pinMode(CH3, INPUT);
+  pinMode(CH4, INPUT);
+  pinMode(CH5, INPUT);
+  pinMode(CH6, INPUT);
+
+  setpoint = 1500;
+
   myPID.SetOutputLimits(-255, 255);
   myPID.SetMode(AUTOMATIC);
-  
-  Serial.begin(57600);      // open the serial port at 9600 bps:
+
+  Serial.begin(57600);
 }
 
 void loop()
-{
- 
-  ch1v = pulseIn(ch1, HIGH);
-  ch2v = pulseIn(ch2, HIGH);
-  ch3v = pulseIn(ch3, HIGH);
-  ch4v = pulseIn(ch4, HIGH);
-  ch5v = pulseIn(ch5, HIGH);
-  ch6v = pulseIn(ch6, HIGH);
-
-  Input = ch1v;
-  myPID.Compute();
-  ch1v += (int)Output;
+{ 
+  D(tmBegin = micros());
+   
+  readRC();
   
-  String RCValues = String(ch1v) + ";" + String(ch2v) + ";" + String(ch3v) + ";" + String(ch4v) + ";" + String(ch5v) + ";" + String(ch6v) + ";" + String(Output) + "\n";
+  input = ch1v;
+  myPID.Compute();
+  ch1v += (int)output;
+  
+  D(telemetry());
+}
+
+void readRC()
+{  
+  ch1v = pulseIn(CH1, HIGH);
+  ch2v = pulseIn(CH2, HIGH);
+  ch3v = pulseIn(CH3, HIGH);
+  ch4v = pulseIn(CH4, HIGH);
+  ch5v = pulseIn(CH5, HIGH);
+  ch6v = pulseIn(CH6, HIGH); 
+}
+
+/* 
+ * Efetua a telemetria dos dados do quadricoptero na seguinte ordem, separados por ';':
+ *   - Canal 1
+ *   - Canal 2
+ *   - Canal 3
+ *   - Canal 4
+ *   - Canal 5
+ *   - Canal 6
+ */  
+void telemetry() 
+{
+  tmEnd = micros();
+  long tmInterval = tmEnd - tmBegin;
+  
+  String RCValues = String(ch1v) + ";";
+  RCValues += String(ch2v) + ";";
+  RCValues += String(ch3v) + ";";
+  RCValues += String(ch4v) + ";";
+  RCValues += String(ch5v) + ";";
+  RCValues += String(ch6v) + ";";
+  RCValues += String(output) + ";";
+  RCValues += String(tmInterval) + ";";
+  RCValues += "\n";
+  
   Serial.print(RCValues);
 }
+
+
+
