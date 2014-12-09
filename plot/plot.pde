@@ -7,7 +7,7 @@ Serial myPort;
 PFont f;
 
 void setup() {
-  size(500, 300);
+  size(550, 300);
   background(#FFFFFF);
   
   f = createFont("Arial", 10);
@@ -53,6 +53,9 @@ void draw() {
     float ch6 = float(RCValues[5]);
     ch6 = map(ch6, 1000.0, 2000.0, 1.0, 100.0);
     
+    float output = float(RCValues[6]);
+//    output = map(ch6, 1000.0, 2000.0, 1.0, 100.0);
+    
     background(#FFFFFF);
     fill(#000000);
     stroke(#000000);
@@ -92,6 +95,9 @@ void draw() {
     arc(380, 180, 40, 40, 0, 2*PI*ch6/100, PIE);
     text("Canal 6", 360, 220);
     text(int(ch6) + "%", 360, 240);
+    
+    text("Output", 420, 220);
+    text(output, 420, 240);
   }
 }
 
