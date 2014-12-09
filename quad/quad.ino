@@ -12,8 +12,7 @@ void normalizeRC();
 #endif
 
 #ifdef DEBUG
-long tmBegin;
-long tmEnd;
+long tmCheckpoint;
 #endif
 
 /* Definição dos canais de entrada. */
@@ -69,9 +68,7 @@ void setup()
 
 /* Loop infinito do Arduino. */
 void loop()
-{ 
-  D(tmBegin = micros());
-   
+{    
   readRC();
   
   //  input = ch1v;
@@ -123,8 +120,8 @@ void normalizeRC()
  */  
 void telemetry() 
 {
-  tmEnd = micros();
-  long tmInterval = tmEnd - tmBegin;
+  long tmInterval = micros() - tmCheckpoint;  
+  tmCheckpoint = micros();
   
   String tmValues;
   tmValues += String(rcThrottle) + ";";
