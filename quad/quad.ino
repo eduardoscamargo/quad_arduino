@@ -1,3 +1,4 @@
+#include <Servo.h>
 #include <PID_v1.h>
 
 void telemetry();
@@ -13,6 +14,7 @@ void normalizeRC();
 
 #ifdef DEBUG
 long tmCheckpoint;
+long tmInterval;
 #endif
 
 /* Definição dos canais de entrada. */
@@ -25,7 +27,7 @@ const int CH6 = 7; /* Dimmer */
 
 /* Duração dos canais do controle (em us). */
 unsigned long channels[6];
-  
+
 /* Valores normalizados dos canais */
 long rcThrottle, rcYaw, rcPitch, rcRoll, rcOnOff, rcDimmer;
 
@@ -43,6 +45,17 @@ const int MIN_CH5 = 1014;
 const int MAX_CH6 = 1018;
 const int MIN_CH6 = 2006;
 
+Servo motorFL;
+Servo motorFR;
+Servo motorBL;
+Servo motorBR;
+
+const int MOTOR_FL = 8; /* To-do test this pin */
+const int MOTOR_FR = 9; 
+const int MOTOR_BL = 10; /* To-do test this pin */
+const int MOTOR_BR = 11; /* To-do test this pin */
+unsigned long val; /* Debug - To-do: retirar */
+  
 /* Parâmetros do PID. */
 double setpoint, input, output;
 
@@ -59,21 +72,28 @@ void setup()
   pinMode(CH6, INPUT);
 
   setpoint = 1500;
-  
+
   myPID.SetOutputLimits(-255, 255);
   myPID.SetMode(AUTOMATIC);
+
+  motorFL.attach(MOTOR_FL);
+  motorFR.attach(MOTOR_FR);
+  motorBL.attach(MOTOR_BL);
+  motorBR.attach(MOTOR_BR);
 
   Serial.begin(57600);
 }
 
 /* Loop infinito do Arduino. */
 void loop()
-{    
+{       
   readRC();
-  
+
   //  input = ch1v;
   // myPID.Compute();
   // ch1v += (int)output;
+  
+  writeMotor();
   
   D(telemetry());
 }
@@ -87,7 +107,7 @@ void readRC()
   channels[3] = pulseIn(CH4, HIGH);
   channels[4] = pulseIn(CH5, HIGH);
   channels[5] = pulseIn(CH6, HIGH); 
-  
+
   normalizeRC();
 }
 
@@ -100,6 +120,15 @@ void normalizeRC()
   rcRoll     = map(channels[0], MIN_CH1, MAX_CH1, -45, 45);
   rcOnOff    = map(channels[4], MIN_CH3, MAX_CH3, 0, 100);
   rcDimmer   = map(channels[5], MIN_CH6, MAX_CH6, 0, 1000);
+}
+
+void writeMotor()
+{
+  val = map(rcThrottle, MIN_CH1, MAX_CH1, 1000, 2000);     // scale it to use it with the servo (value between 0 and 180) 
+  motorFL.writeMicroseconds(val);
+  motorFR.writeMicroseconds(val);
+  motorBL.writeMicroseconds(val);
+  motorBR.writeMicroseconds(val);
 }
 
 /* 
@@ -117,10 +146,11 @@ void normalizeRC()
  * - Canal 4 (em us - entre ~1000 a ~2000)
  * - Canal 5 (em us - entre ~1000 a ~2000)
  * - Canal 6 (em us - entre ~1000 a ~2000)
- */  
+ */
 void telemetry() 
 {
-  long tmInterval = micros() - tmCheckpoint;  
+  /* Calcula a frequência do loop */
+  tmInterval = micros() - tmCheckpoint; 
   tmCheckpoint = micros();
   
   String tmValues;
@@ -132,13 +162,15 @@ void telemetry()
   tmValues += String(rcDimmer) + ";";
   // tmValues += String(output) + ";";
   tmValues += String(tmInterval) + ";";
+  tmValues += String(val) + ";";
   //for (int i=0; i < 6; i++) {
   //  tmValues += String(channels[i]) + ";";
   //}
   tmValues += "\n";
-  
+
   Serial.print(tmValues);
 }
+
 
 
 

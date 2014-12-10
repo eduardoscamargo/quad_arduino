@@ -56,6 +56,8 @@ void draw() {
     float interval = float(RCValues[6]);
     interval = 1000000 / interval;
     
+    float val = float(RCValues[7]);
+    
     background(#FFFFFF);
     stroke(#000000);
     fill(#000000);
@@ -113,6 +115,9 @@ void draw() {
     
     text("Frequency", 420, 220);
     text(interval + "Hz", 420, 240);
+    
+    text("Val", 480, 220);
+    text(val, 480, 240);
   }
 }
 
