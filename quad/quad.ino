@@ -124,7 +124,7 @@ void normalizeRC()
 
 void writeMotor()
 {
-  val = map(rcThrottle, MIN_CH1, MAX_CH1, 1000, 2000);     // scale it to use it with the servo (value between 0 and 180) 
+  val = map(rcThrottle, MIN_CH1, MAX_CH1, 1000, 2000);
   motorFL.writeMicroseconds(val);
   motorFR.writeMicroseconds(val);
   motorBL.writeMicroseconds(val);
