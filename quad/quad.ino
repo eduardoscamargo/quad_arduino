@@ -2,53 +2,49 @@
 #include <PID_v1.h>
 #include "I2Cdev.h"
 #include "MPU6050_6Axis_MotionApps20.h"
-#if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
 #include "Wire.h"
-#endif
-
-MPU6050 mpu;
 
 void telemetry();
 void readRC();
 void normalizeRC();
 
-#define DEBUG
+#define DEBUG // Habilita a telemetria
 #ifdef DEBUG
-#define D(X) X
+  #define D(X) X
 #else
-#define D(X)
+  #define D(X)
 #endif
 
 #ifdef DEBUG
-long tmCheckpoint;
-long tmInterval;
+long tmCheckpoint; // Marca o tempo no checkpoint
+long tmInterval;   // Intervalo entre última medição e o checkpoint
 #endif
 
+/* Indicação de atividade do processador */
 #define LED_PIN 13
 bool blinkState = false;
 
-// MPU control/status vars
-bool dmpReady = false;  // set true if DMP init was successful
-uint8_t mpuIntStatus;   // holds actual interrupt status byte from MPU
-uint8_t devStatus;      // return status after each device operation (0 = success, !0 = error)
-uint16_t packetSize;    // expected DMP packet size (default is 42 bytes)
-uint16_t fifoCount;     // count of all bytes currently in FIFO
-uint8_t fifoBuffer[64]; // FIFO storage buffer
+/* Variáveis de controle do MPU6050 (só MPU para facilitar) para a interface 
+ * com o DMP - Processador que entrega valor prontos do giroscópio. */
+MPU6050 mpu;            // Entidade que representa o MPU
+bool dmpReady = false;  // Definida para true se o DMP foi inicializado com sucesso
+uint8_t mpuIntStatus;   // Armazena o valor atual do byte de status de interrupção do MPU
+uint8_t dmpStatus;      // Status a cada operação do DMP (0 = sucesso, !0 = erro)
+uint16_t packetSize;    // Tamanho esperado do pacote do DMP (o padrão é 42 bytes)
+uint16_t fifoCount;     // Conta quantos bytes há no FIFO
+uint8_t fifoBuffer[64]; // FIFO do DMP
 
-// orientation/motion vars
-Quaternion q;           // [w, x, y, z]         quaternion container
-VectorFloat gravity;    // [x, y, z]            gravity vector
-float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
+/* Variáveis de orientação que vem do DMP */
+Quaternion q;           // [w, x, y, z]         Container do quaternion
+VectorFloat gravity;    // [x, y, z]            Vetor de gravidade
+float ypr[3];           // [yaw, pitch, roll]   Container do yaw/pitch/roll e do vetor de gravidade
 
-// ================================================================
-// ===               INTERRUPT DETECTION ROUTINE                ===
-// ================================================================
-
-volatile bool mpuInterrupt = false;     // indicates whether MPU interrupt pin has gone high
+/* Rotina de interrupção */ 
+volatile bool mpuInterrupt = false; // Indica que houve interrupção da MPU, ou seja, há dados a serem lidos
 void dmpDataReady() {
   mpuInterrupt = true;
 }
-
+/* Fim da rotina de interrupção */
 
 /* Definição dos canais de entrada. */
 const int CH1 = 8; /* Roll (horizontal da direita) */
@@ -58,7 +54,7 @@ const int CH4 = 5; /* Yaw (horizontal da esquerda */
 const int CH5 = 6; /* ON/OFF */
 const int CH6 = 7; /* Dimmer */
 
-/* Duração dos canais do controle (em us). */
+/* Armazena a duração dos canais do controle (em us). */
 unsigned long channels[6];
 
 /* Valores normalizados dos canais */
@@ -78,16 +74,17 @@ const int MIN_CH5 = 1014;
 const int MAX_CH6 = 1018;
 const int MIN_CH6 = 2006;
 
+/* Entidades que representam os motores. Responsáveis por acionar os ESCs realizando um PPM entre 1ms e 2ms. */
 Servo motorFL;
 Servo motorFR;
 Servo motorBL;
 Servo motorBR;
 
+/* Canais de cada motor */
 const int MOTOR_FL = 8; /* To-do test this pin */
 const int MOTOR_FR = 9; 
 const int MOTOR_BL = 10; /* To-do test this pin */
 const int MOTOR_BR = 11; /* To-do test this pin */
-unsigned long val; /* Debug - To-do: retirar */
 
 /* Parâmetros do PID. */
 double setpoint, input, output;
@@ -95,39 +92,40 @@ double setpoint, input, output;
 PID myPID(&input, &output, &setpoint,1,2,3, DIRECT);
 
 /* Inicialização do Arduino. */
-void setup() {  
+void setup() {
+  /* Bind dos canais de entrada do controle */
   pinMode(CH1, INPUT);
   pinMode(CH2, INPUT);
   pinMode(CH3, INPUT);
   pinMode(CH4, INPUT);
   pinMode(CH5, INPUT);
   pinMode(CH6, INPUT);
+  
+  /* Bind dos canais de saída dos motores (ESCs) */
+  motorFL.attach(MOTOR_FL);
+  motorFR.attach(MOTOR_FR);
+  motorBL.attach(MOTOR_BL);
+  motorBR.attach(MOTOR_BR);
 
   setpoint = 1500;
 
   myPID.SetOutputLimits(-255, 255);
   myPID.SetMode(AUTOMATIC);
 
-  motorFL.attach(MOTOR_FL);
-  motorFR.attach(MOTOR_FR);
-  motorBL.attach(MOTOR_BL);
-  motorBR.attach(MOTOR_BR);
-
-  // join I2C bus (I2Cdev library doesn't do this automatically)
-#if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
+  /* Inicializa o barramento I2C (a biblioteca I2Cdev não faz isso automaticamente) */
   Wire.begin();
   TWBR = 24; // 400kHz I2C clock (200kHz if CPU is 8MHz)
-#elif I2CDEV_IMPLEMENTATION == I2CDEV_BUILTIN_FASTWIRE
-  Fastwire::setup(400, true);
-#endif
 
+  /* Inicializa a porta serial */
   Serial.begin(115200);
-  while (Serial.available() && Serial.read()); // empty buffer
+  while (Serial.available() && Serial.read()); // Limpa o buffer
 
+  /* Inicializa a MPU e seu respectivo DMP */
   mpu.initialize();
-  Serial.println(F("Initializing DMP..."));
-  devStatus = mpu.dmpInitialize();
+  Serial.println(F("Inicializando DMP..."));
+  dmpStatus = mpu.dmpInitialize();
 
+  /* Define os offsets do MPU. Utilizado o programa MPU6050_calibration para chegar a esses números. */
   mpu.setXAccelOffset(616);
   mpu.setYAccelOffset(2244);
   mpu.setZAccelOffset(300);
@@ -135,30 +133,30 @@ void setup() {
   mpu.setYGyroOffset(-25);
   mpu.setZGyroOffset(44); 
 
-  // make sure it worked (returns 0 if so)
-  if (devStatus == 0) {
-    // turn on the DMP, now that it's ready
+  /* Só prossegue somente se o houve a inicialização correta do DMP */
+  if (dmpStatus == 0) {
+    /* Liga o DMP. Agora o MPU está pronto! */
     mpu.setDMPEnabled(true);
 
-    // enable Arduino interrupt detection
-    Serial.println(F("Enabling interrupt detection (Arduino external interrupt 0)..."));
+    /* Habilita a detecção de interrupção do Arduino */
+    Serial.println(F("Habilitando interrupcao 0 (pino 2)..."));
     attachInterrupt(0, dmpDataReady, RISING);
     mpuIntStatus = mpu.getIntStatus();
 
-    // set our DMP Ready flag so the main loop() function knows it's okay to use it
-    Serial.println(F("DMP ready! Waiting for first interrupt..."));
+    /* Inicializa a flag de controle do DMP para o loop() saber que está tudo certo */
+    Serial.println(F("DMP pronto! Iniciando programa..."));
     dmpReady = true;
 
-    // get expected DMP packet size for later comparison
+    /* Obtem o tamanho do pacote do DMP */
     packetSize = mpu.dmpGetFIFOPacketSize();
+    Serial.println(F("Tamanho do pacote do DMP obtido..."));
   } 
   else {
-    // ERROR!
-    // 1 = initial memory load failed
-    // 2 = DMP configuration updates failed
-    // (if it's going to break, usually the code will be 1)
-    Serial.print(F("DMP Initialization failed (code "));
-    Serial.print(devStatus);
+    // ERRO!
+    // 1 = Carregamento inicial da meméria falhou
+    // 2 = Atualização da configuração do DMP falhou
+    Serial.print(F("Inicialização do DMP falhou (código "));
+    Serial.print(dmpStatus);
     Serial.println(F(")"));
   }
 
@@ -168,16 +166,15 @@ void setup() {
 
 /* Loop infinito do Arduino. */
 void loop() {       
-  // if DMP programming failed, don't try to do anything
-
+  /* Se a programação do DMP falhou, não faz nada */
   if (!dmpReady) {
     return;
   }
 
   readOrientation();
 
-  readRC();
-
+  // readRC();
+  
   //  input = ch1v;
   // myPID.Compute();
   // ch1v += (int)output;
@@ -186,7 +183,7 @@ void loop() {
 
   // D(telemetry());
 
-  // blink LED to indicate activity
+  /* Pisca a led para indicar atividade */
   blinkState = !blinkState;
   digitalWrite(LED_PIN, blinkState);
 }
@@ -213,54 +210,64 @@ void normalizeRC() {
   rcDimmer   = map(channels[5], MIN_CH6, MAX_CH6, 0, 1000);
 }
 
-/* Efetua a escrita da potência dos motores entre 1 e 2ms */
+/* Efetua a escrita da potência dos motores entre 1ms e 2ms */
 void writeMotor() {
-  val = map(rcThrottle, MIN_CH1, MAX_CH1, 1000, 2000);
+  int val = map(rcThrottle, MIN_CH1, MAX_CH1, 1000, 2000);
   motorFL.writeMicroseconds(val);
   motorFR.writeMicroseconds(val);
   motorBL.writeMicroseconds(val);
   motorBR.writeMicroseconds(val);
 }
 
+/* Efetua a leitura da orientação a ser armazenada na variável "ypr" */
 void readOrientation() {
+  bool fifoOverflow = false; // Marca se houve overflow da FIFO durante a execução
+  
+  /* Le somente se houve interrupção */
   if (mpuInterrupt) {
-    // reset interrupt flag and get INT_STATUS byte
+    /* Reseta a flag de interrupção */ 
     mpuInterrupt = false;
+    
+    /* Obtém o byte INT_STATUS do MPU */
     mpuIntStatus = mpu.getIntStatus();
 
-    // get current FIFO count
+    /* Obtém a contagem da FIFO */
     fifoCount = mpu.getFIFOCount();
-    
-    // check for overflow (this should never happen unless our code is too inefficient)
-    if ((mpuIntStatus & 0x10) || fifoCount == 1024) {
-      // reset so we can continue cleanly
-      mpu.resetFIFO();
-      //Serial.println(F("FIFO overflow!"));
 
-      // otherwise, check for DMP data ready interrupt (this should happen frequently)
-      //} 
+    /* Verifica se houve overflow da FIFO. Quanto mais ineficiente o código, mais irá ocorrer. */
+    if ((mpuIntStatus & 0x10) || fifoCount == 1024) {
+      // Reseta a FIFO
+      mpu.resetFIFO();
+      fifoOverflow = true;
     } 
-    else if (mpuIntStatus & 0x02) {
-      //if (mpuIntStatus & 0x02) {
-      // wait for correct available data length, should be a VERY short wait
+    
+    /* Se houve overflow, aguarda o próximo valor estar pronto */
+    if (fifoOverflow) {
+      while(!mpuInterrupt);
+    }
+    
+    if (mpuIntStatus & 0x02) {      
+      /* Obtém a contagem da FIFO */
+      fifoCount = mpu.getFIFOCount();
+    
+      /* Aguarda encher a FIFO caso não esteja com os todos dados completos (pacote completo) */
       while (fifoCount < packetSize) fifoCount = mpu.getFIFOCount();
 
-      // read a packet from FIFO
+      /* Dado está pronto para ser lido do MPU */
       mpu.getFIFOBytes(fifoBuffer, packetSize);
-      // track FIFO count here in case there is > 1 packet available
-      // (this lets us immediately read more without waiting for an interrupt)
-      fifoCount -= packetSize;
 
-      // display Euler angles in degrees
+      /* Obtém os valores (Yaw, Pitch e Roll) do DMP */ 
       mpu.dmpGetQuaternion(&q, fifoBuffer);
       mpu.dmpGetGravity(&gravity, &q);
       mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
-      Serial.print("ypr\t");
-      Serial.print(ypr[0] * 180/M_PI);
-      Serial.print("\t");
-      Serial.print(ypr[1] * 180/M_PI);
-      Serial.print("\t");
-      Serial.println(ypr[2] * 180/M_PI);
+      
+      /* Debug */
+      D(Serial.print(F("ypr\t")));
+      D(Serial.print(ypr[0] * 180/M_PI));
+      D(Serial.print("\t"));
+      D(Serial.print(ypr[1] * 180/M_PI));
+      D(Serial.print("\t"));
+      D(Serial.println(ypr[2] * 180/M_PI));
     }
   }
 }
@@ -294,7 +301,6 @@ void telemetry() {
   tmValues += String(rcDimmer) + ";";
   // tmValues += String(output) + ";";
   tmValues += String(tmInterval) + ";";
-  tmValues += String(val) + ";";
   //for (int i=0; i < 6; i++) {
   //  tmValues += String(channels[i]) + ";";
   //}
@@ -302,6 +308,7 @@ void telemetry() {
 
   Serial.print(tmValues);
 }
+
 
 
 
