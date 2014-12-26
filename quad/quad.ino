@@ -23,8 +23,9 @@ String padding(String text, int size);
 #endif
 
 #ifdef DEBUG
-  long tmCheckpoint; // Marca o tempo no checkpoint
-  long tmInterval;   // Intervalo entre última medição e o checkpoint
+  long tmCheckpoint;   // Marca o tempo no checkpoint
+  long tmInterval;     // Intervalo entre última medição e o checkpoint
+  int countToSend = 0; // Controla o intervalo de envio das informações
 #endif
 
 /* Indicação de atividade do processador */
@@ -61,7 +62,7 @@ const int MIN_RC_DIMMER = 2006;
 unsigned long channels[6];
 
 /* Valores normalizados dos canais */
-long rcThrottle, rcYaw, rcPitch, rcRoll, rcOnOff, rcDimmer;
+double rcThrottle, rcYaw, rcPitch, rcRoll, rcOnOff, rcDimmer;
 
 /**************************************
  * Giroscópio e Acelerômetro: MPU6050 *
@@ -81,7 +82,7 @@ uint8_t fifoBuffer[64]; // FIFO do DMP
 Quaternion q;        // [w, x, y, z]         Container do quaternion
 VectorFloat gravity; // [x, y, z]            Vetor de gravidade
 float ypr[3]; // [yaw, pitch, roll]   Container do yaw/pitch/roll e do vetor de gravidade
-float ypr_degree[3]; // [yaw, pitch, roll]   Container do yaw/pitch/roll e do vetor de gravidade em graus/segundo
+double ypr_degree[3]; // [yaw, pitch, roll]   Container do yaw/pitch/roll e do vetor de gravidade em graus/segundo
 
 const int DMP_YAW = 0;
 const int DMP_PITCH = 1;
@@ -120,14 +121,14 @@ struct {
 } pid_params;
 
 /* Variáveis de saída do PID para a taxa de rotação */
-float pitch_rate_output;
-float roll_rate_output;
-float yaw_rate_output;
+double pitch_rate_output;
+double roll_rate_output;
+double yaw_rate_output;
 
 /* Variáveis de saída do PID para a estabilização */
-float pitch_stab_output;
-float roll_stab_output;
-float yaw_stab_output;
+double pitch_stab_output;
+double roll_stab_output;
+double yaw_stab_output;
 
 /* PIDs para a taxa de rotação. Entrada: taxa de rotação do giroscópio. Objetivo: Taxa de giro proporcional ao erro. Saída: Potência para o motor. */
 /*                         ENTRADA                         SAÍDA                  OBJETIVO        P   D  I  DIREÇÃO */
@@ -136,10 +137,10 @@ float yaw_stab_output;
 //PID pid_yaw_rate   (/* taxa de giro */, &yaw_rate_output, &yaw_stab_output, 1, 2, 3, DIRECT);
 
 /* PIDs para a taxa de estabilização. Entrada: posição do quadricóptero através do MPU. Objetivo: Posição indicada através do controle. Saída: Taxa de giro proporcional ao erro. */
-/*                         ENTRADA                         SAÍDA                  OBJETIVO        P   D  I  DIREÇÃO */
-PID pid_pitch_stab ((double *)&ypr[DMP_PITCH], (double *)&pitch_stab_output, (double *)&rcPitch, 0.7, 0, 1, DIRECT);
-PID pid_roll_stab  ((double *)&ypr[DMP_ROLL],  (double *)&roll_stab_output,  (double *)&rcRoll,  0.7, 0, 1, DIRECT);
-PID pid_yaw_stab   ((double *)&ypr[DMP_YAW],   (double *)&yaw_stab_output,   (double *)&rcYaw,   0.7, 0, 1, DIRECT);
+/*                        ENTRADA                 SAÍDA          OBJETIVO  P  I  D  DIREÇÃO */
+PID pid_pitch_stab (&ypr_degree[DMP_PITCH], &pitch_stab_output, &rcPitch, 10, 4, 0, DIRECT);
+PID pid_roll_stab  (&ypr_degree[DMP_ROLL],  &roll_stab_output,  &rcRoll,  10, 4, 0, DIRECT);
+PID pid_yaw_stab   (&ypr_degree[DMP_YAW],   &yaw_stab_output,   &rcYaw,   10, 4, 0, DIRECT);
 /* Fim do PID */
 
 /*************************
@@ -147,10 +148,10 @@ PID pid_yaw_stab   ((double *)&ypr[DMP_YAW],   (double *)&yaw_stab_output,   (do
  *************************/
 
 /* Canais de cada motor */
-const int MOTOR_PIN_FL = 8; /* To-do test this pin */
-const int MOTOR_PIN_FR = 9;
-const int MOTOR_PIN_BL = 10; /* To-do test this pin */
-const int MOTOR_PIN_BR = 11; /* To-do test this pin */
+const int MOTOR_PIN_FL = 9; /* To-do test this pin */
+const int MOTOR_PIN_FR = 10;
+const int MOTOR_PIN_BL = 11; /* To-do test this pin */
+const int MOTOR_PIN_BR = 12; /* To-do test this pin */
 
 /* Entidades que representam os motores. Responsáveis por acionar os ESCs realizando um PPM entre 1ms e 2ms. */
 Servo motorFL;
@@ -175,8 +176,8 @@ void setup() {
   pinMode(CH1, INPUT);
   pinMode(CH2, INPUT);
   pinMode(CH3, INPUT);
-  pinMode(CH4, INPUT);
   pinMode(CH5, INPUT);
+  pinMode(CH4, INPUT);
   pinMode(CH6, INPUT);
 
   /* Bind dos canais de saída dos motores (ESCs) */
@@ -248,17 +249,20 @@ void loop() {
   static float yaw_target = 0;
 
   /* Se a programação do DMP falhou, não faz nada */
+  Serial.println("!dmpReady");
   if (!dmpReady) {
     return;
   }
 
+  Serial.println("readOrientation");
   readOrientation();
 
+  Serial.println("readRC");
   readRC();
 
   /* Voe Forest, Voe! */
   if(rcThrottle > MIN_RC_THROTTLE + 100) {  // Throttle raised, turn on stablisation.
-
+    Serial.println("PID");
     pid_pitch_stab.Compute();
     pid_roll_stab.Compute();
     pid_yaw_stab.Compute();
@@ -301,6 +305,7 @@ void loop() {
     motors[MOTOR_BR] = rcThrottle - roll_stab_output - pitch_stab_output - yaw_stab_output;
 
   } else {
+    Serial.println("else");
     /* Motores desligados */
     motors[MOTOR_FL] = motors[MOTOR_FR] = motors[MOTOR_BL] = motors[MOTOR_BR] = 1000;
 
@@ -314,10 +319,13 @@ void loop() {
     // }
   }
 
+  Serial.println("writeMotor");
   writeMotor();
 
+  Serial.println("telemetry");
   D(telemetry());
 
+  Serial.println("blink");
   /* Pisca a led para indicar atividade */
   blinkState = !blinkState;
   digitalWrite(LED_PIN, blinkState);
@@ -325,22 +333,22 @@ void loop() {
 
 /* Efetua a leitura dos canais dos controles. */
 void readRC() {
-  channels[0] = pulseIn(CH1, HIGH);
-  channels[1] = pulseIn(CH2, HIGH);
-  channels[2] = pulseIn(CH3, HIGH);
-  channels[3] = pulseIn(CH4, HIGH);
-  channels[4] = pulseIn(CH5, HIGH);
-  channels[5] = pulseIn(CH6, HIGH);
+  channels[0] = pulseIn(CH1, HIGH); /* Roll (horizontal da direita) */
+  channels[1] = pulseIn(CH2, HIGH); /* Pitch (vertical da direita) */
+  channels[2] = pulseIn(CH3, HIGH); /* Throttle (vertical da esquerda) */
+  channels[3] = pulseIn(CH4, HIGH); /* Yaw (horizontal da esquerda */
+  channels[4] = pulseIn(CH5, HIGH); /* ON/OFF */
+  channels[5] = pulseIn(CH6, HIGH); /* Dimmer */
 
   normalizeRC();
 }
 
 /* Normaliza os valores do controle para ranges pré definidos. */
 void normalizeRC() {
+  rcRoll     = map(channels[0], MIN_RC_ROLL, MAX_RC_ROLL, -45, 45);
+  rcPitch    = map(channels[1], MIN_RC_PITCH, MAX_RC_PITCH, 45, -45);
   rcThrottle = channels[2];
   rcYaw      = map(channels[3], MIN_RC_YAW, MAX_RC_YAW, -150, 150);
-  rcPitch    = map(channels[1], MIN_RC_PITCH, MAX_RC_PITCH, 45, -45);
-  rcRoll     = map(channels[0], MIN_RC_ROLL, MAX_RC_ROLL, -45, 45);
   rcOnOff    = map(channels[4], MIN_RC_ON_OFF, MAX_RC_ON_OFF, 0, 100);
   rcDimmer   = map(channels[5], MIN_RC_DIMMER, MAX_RC_DIMMER, 0, 1000);
 }
@@ -436,28 +444,32 @@ void telemetry() {
   tmCheckpoint = micros();
 
   String tmValues;
-  tmValues += padding("RCT=" + String(rcThrottle), 8) + ";";
-  tmValues += padding("RCY=" + String(rcYaw), 8) + ";";
-  tmValues += padding("RCP=" + String(rcPitch), 8) + ";";
-  tmValues += padding("RCR=" + String(rcRoll), 8) + ";";
-  tmValues += padding("RCO=" + String(rcOnOff), 8) + ";";
-  tmValues += padding("RCD=" + String(rcDimmer), 8) + ";";
-  tmValues += padding("DMP=" + String(ypr_degree[DMP_PITCH]), 10) + ";";
-  tmValues += padding("DMR=" + String(ypr_degree[DMP_ROLL]), 10) + ";";
-  tmValues += padding("DMY=" + String(ypr_degree[DMP_YAW]), 10) + ";";
-  tmValues += padding("PIP=" + String(pitch_stab_output), 7) + ";";
-  tmValues += padding("PIR=" + String(roll_stab_output), 7) + ";";
-  tmValues += padding("PIY=" + String(yaw_stab_output), 7) + ";";
-  tmValues += padding("MFL=" + String(motors[MOTOR_FL]), 8) + ";";
-  tmValues += padding("MFR=" + String(motors[MOTOR_FR]), 8) + ";";
-  tmValues += padding("MBL=" + String(motors[MOTOR_BL]), 8) + ";";
-  tmValues += padding("MBR=" + String(motors[MOTOR_BR]), 8) + ";";
-  tmValues += padding("INT=" + String(tmInterval), 10) + ";";
-  // for (int i=0; i < 6; i++) {
-  //  tmValues += padding(String(channels[i]), 8) + ";";
-  // }
+  tmValues += padding("RCT=" + String(int(rcThrottle)), 8) + ";";
+  tmValues += padding("RCY=" + String(int(rcYaw)), 8) + ";";
+  tmValues += padding("RCP=" + String(int(rcPitch)), 8) + ";";
+  tmValues += padding("RCR=" + String(int(rcRoll)), 8) + ";";
+  tmValues += padding("RCO=" + String(int(rcOnOff)), 8) + ";";
+  tmValues += padding("RCD=" + String(int(rcDimmer)), 8) + ";";
+  tmValues += padding("DMP=" + String(int(ypr_degree[DMP_PITCH])), 10) + ";";
+  tmValues += padding("DMR=" + String(int(ypr_degree[DMP_ROLL])), 10) + ";";
+  tmValues += padding("DMY=" + String(int(ypr_degree[DMP_YAW])), 10) + ";";
+  tmValues += padding("PIP=" + String(int(pitch_stab_output)), 8) + ";";
+  tmValues += padding("PIR=" + String(int(roll_stab_output)), 8) + ";";
+  tmValues += padding("PIY=" + String(int(yaw_stab_output)), 8) + ";";
+  tmValues += padding("MFL=" + String(int(motors[MOTOR_FL])), 8) + ";";
+  tmValues += padding("MFR=" + String(int(motors[MOTOR_FR])), 8) + ";";
+  tmValues += padding("MBL=" + String(int(motors[MOTOR_BL])), 8) + ";";
+  tmValues += padding("MBR=" + String(int(motors[MOTOR_BR])), 8) + ";";
+  tmValues += padding("INT=" + String(int(tmInterval)), 10) + ";";
+  for (int i=0; i < 6; i++) {
+   tmValues += padding(String(channels[i]), 8) + ";";
+  }
 
-  Serial.println(tmValues);
+  countToSend++;
+  if (countToSend > 4) {
+    Serial.println(tmValues);
+    countToSend = 0;
+  }
 }
 
 String padding(String text, int size){
