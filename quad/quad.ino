@@ -80,11 +80,13 @@ uint8_t fifoBuffer[64]; // FIFO do DMP
 /* Variáveis de orientação que vem do DMP */
 Quaternion q;        // [w, x, y, z]         Container do quaternion
 VectorFloat gravity; // [x, y, z]            Vetor de gravidade
+float ypr[3]; // [yaw, pitch, roll]   Container do yaw/pitch/roll e do vetor de gravidade
+float ypr_degree[3]; // [yaw, pitch, roll]   Container do yaw/pitch/roll e do vetor de gravidade em graus/segundo
 
 const int DMP_YAW = 0;
 const int DMP_PITCH = 1;
 const int DMP_ROLL = 2;
-float ypr[3]; // [yaw, pitch, roll]   Container do yaw/pitch/roll e do vetor de gravidade
+
 
 /****************
  * Interrupções *
@@ -264,7 +266,7 @@ void loop() {
     // is pilot asking for yaw change - if so feed directly to rate pid (overwriting yaw stab output)
     if(abs(rcYaw ) > 5) {
       yaw_stab_output = rcYaw;
-      yaw_target = ypr[DMP_YAW];   // remember this yaw for when pilot stops
+      yaw_target = ypr_degree[DMP_YAW];   // remember this yaw for when pilot stops
     }
 
     // pid_pitch_rate.calculate()
@@ -303,7 +305,7 @@ void loop() {
     motors[MOTOR_FL] = motors[MOTOR_FR] = motors[MOTOR_BL] = motors[MOTOR_BR] = 1000;
 
     // reset yaw target so we maintain this on takeoff
-    yaw_target = ypr[DMP_YAW];
+    yaw_target = ypr_degree[DMP_YAW];
 
     // reset PID integrals whilst on the ground
     // for(int i=0; i<6; i++)
@@ -393,6 +395,11 @@ void readOrientation() {
       mpu.dmpGetQuaternion(&q, fifoBuffer);
       mpu.dmpGetGravity(&gravity, &q);
       mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
+
+      /* Converte para graus/segundo */
+      for (int i = 0; i < 3; i++) {
+        ypr_degree[i] = ypr[i] * 180/M_PI;
+      }
     }
   }
 }
@@ -435,9 +442,9 @@ void telemetry() {
   tmValues += padding("RCR=" + String(rcRoll), 8) + ";";
   tmValues += padding("RCO=" + String(rcOnOff), 8) + ";";
   tmValues += padding("RCD=" + String(rcDimmer), 8) + ";";
-  tmValues += padding("DMP=" + String(ypr[DMP_PITCH]), 10) + ";";
-  tmValues += padding("DMR=" + String(ypr[DMP_ROLL]), 10) + ";";
-  tmValues += padding("DMY=" + String(ypr[DMP_YAW]), 10) + ";";
+  tmValues += padding("DMP=" + String(ypr_degree[DMP_PITCH]), 10) + ";";
+  tmValues += padding("DMR=" + String(ypr_degree[DMP_ROLL]), 10) + ";";
+  tmValues += padding("DMY=" + String(ypr_degree[DMP_YAW]), 10) + ";";
   tmValues += padding("PIP=" + String(pitch_stab_output), 7) + ";";
   tmValues += padding("PIR=" + String(roll_stab_output), 7) + ";";
   tmValues += padding("PIY=" + String(yaw_stab_output), 7) + ";";
