@@ -249,20 +249,20 @@ void loop() {
   static float yaw_target = 0;
 
   /* Se a programação do DMP falhou, não faz nada */
-  Serial.println("!dmpReady");
+  // D(Serial.println("DMP rdy"));
   if (!dmpReady) {
     return;
   }
 
-  Serial.println("readOrientation");
+  D(Serial.println(" "));
+  D(Serial.println("Red Ori"));
   readOrientation();
 
-  Serial.println("readRC");
+  // D(Serial.println("Read RC"));
   readRC();
 
   /* Voe Forest, Voe! */
   if(rcThrottle > MIN_RC_THROTTLE + 100) {  // Throttle raised, turn on stablisation.
-    Serial.println("PID");
     pid_pitch_stab.Compute();
     pid_roll_stab.Compute();
     pid_yaw_stab.Compute();
@@ -305,7 +305,6 @@ void loop() {
     motors[MOTOR_BR] = rcThrottle - roll_stab_output - pitch_stab_output - yaw_stab_output;
 
   } else {
-    Serial.println("else");
     /* Motores desligados */
     motors[MOTOR_FL] = motors[MOTOR_FR] = motors[MOTOR_BL] = motors[MOTOR_BR] = 1000;
 
@@ -319,13 +318,11 @@ void loop() {
     // }
   }
 
-  Serial.println("writeMotor");
+  // D(Serial.println("Wrt mtr"));
   writeMotor();
 
-  Serial.println("telemetry");
-  D(telemetry());
+  // D(telemetry());
 
-  Serial.println("blink");
   /* Pisca a led para indicar atividade */
   blinkState = !blinkState;
   digitalWrite(LED_PIN, blinkState);
@@ -365,6 +362,7 @@ void writeMotor() {
 /* Efetua a leitura da orientação a ser armazenada na variável "ypr" */
 void readOrientation() {
   bool fifoOverflow = false; // Marca se houve overflow da FIFO durante a execução
+  D(Serial.println("init RO"));
 
   /* Le somente se houve interrupção */
   if (mpuInterrupt) {
@@ -373,40 +371,58 @@ void readOrientation() {
 
     /* Obtém o byte INT_STATUS do MPU */
     mpuIntStatus = mpu.getIntStatus();
+    D(Serial.println("getIntStatus: " + String(mpuIntStatus)));
 
     /* Obtém a contagem da FIFO */
     fifoCount = mpu.getFIFOCount();
+    D(Serial.println("getFIFOCount: " + String(fifoCount)));
 
     /* Verifica se houve overflow da FIFO. Quanto mais ineficiente o código, mais irá ocorrer. */
     if ((mpuIntStatus & 0x10) || fifoCount == 1024) {
       // Reseta a FIFO
+      D(Serial.println("resetFIFO: " + String(fifoCount)));
       mpu.resetFIFO();
       fifoOverflow = true;
+      return;
     }
 
     /* Se houve overflow, aguarda o próximo valor estar pronto */
-    if (fifoOverflow) {
-      while(!mpuInterrupt);
-    }
+    // int DMPwatchdog = 0;
+    // if (fifoOverflow) {
+    //   D(Serial.println("Agu Int"));
+    //   while(!mpuInterrupt);
+    //   D(Serial.println("Int rec"));
+    // }
 
-    if (mpuIntStatus & 0x02) {
+    if (mpuIntStatus & 0x01) {
       /* Obtém a contagem da FIFO */
       fifoCount = mpu.getFIFOCount();
 
       /* Aguarda encher a FIFO caso não esteja com os todos dados completos (pacote completo) */
-      while (fifoCount < packetSize) fifoCount = mpu.getFIFOCount();
+      Serial.println("Agu pac");
+      int DMPwatchdog = 0;
+      while (fifoCount < packetSize && DMPwatchdog < 5) {
+        fifoCount = mpu.getFIFOCount();
+        D(Serial.println("Count: " + String(fifoCount)));
+        DMPwatchdog++;
+      }
 
-      /* Dado está pronto para ser lido do MPU */
-      mpu.getFIFOBytes(fifoBuffer, packetSize);
+      if (DMPwatchdog < 5) {
+        D(Serial.println("Pac rec...."));
 
-      /* Obtém os valores (Yaw, Pitch e Roll) do DMP */
-      mpu.dmpGetQuaternion(&q, fifoBuffer);
-      mpu.dmpGetGravity(&gravity, &q);
-      mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
+        /* Dado está pronto para ser lido do MPU */
+        mpu.getFIFOBytes(fifoBuffer, packetSize);
 
-      /* Converte para graus/segundo */
-      for (int i = 0; i < 3; i++) {
-        ypr_degree[i] = ypr[i] * 180/M_PI;
+        /* Obtém os valores (Yaw, Pitch e Roll) do DMP */
+        mpu.dmpGetQuaternion(&q, fifoBuffer);
+        mpu.dmpGetGravity(&gravity, &q);
+        mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
+        D(Serial.println("Fim lei"));
+
+        /* Converte para graus/segundo */
+        for (int i = 0; i < 3; i++) {
+          ypr_degree[i] = ypr[i] * 180/M_PI;
+        }
       }
     }
   }
@@ -438,7 +454,8 @@ void readOrientation() {
  * - Canal 6 (em us - entre ~1000 a ~2000)
  * - Intervalo do loop (em us)
  */
-void telemetry() {
+
+D(void telemetry() {
   /* Calcula a frequência do loop */
   tmInterval = micros() - tmCheckpoint;
   tmCheckpoint = micros();
@@ -481,4 +498,4 @@ String padding(String text, int size){
   }
 
   return newString;
-}
+})
