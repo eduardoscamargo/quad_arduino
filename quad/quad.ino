@@ -372,7 +372,6 @@ void setupMPU() {
 
   /* Inicializa a MPU e seu respectivo DMP */
   mpu.initialize();
-  D(Serial.println("A"));
   dmpStatus = mpu.dmpInitialize();
 
   /* Define os offsets do MPU. Utilizado o programa MPU6050_calibration para chegar a esses números. */
@@ -385,7 +384,6 @@ void setupMPU() {
 
   /* Só prossegue somente se o houve a inicialização correta do DMP */
   if (dmpStatus == 0) {
-    D(Serial.println("B"));
     /* Liga o DMP. Agora o MPU está pronto! */
     mpu.setDMPEnabled(true);
 
@@ -393,13 +391,11 @@ void setupMPU() {
     attachInterrupt(0, dmpDataReady, RISING);
     mpuIntStatus = mpu.getIntStatus();
 
-D(Serial.println("C"));
     /* Inicializa a flag de controle do DMP para o loop() saber que está tudo certo */
     dmpReady = true;
 
     /* Obtem o tamanho do pacote do DMP */
     packetSize = mpu.dmpGetFIFOPacketSize();
-    D(Serial.println("D"));
   }
   else {
     // ERRO!
@@ -450,7 +446,6 @@ void PIDCalibration() {
   if (rcOnOff > 10) {
     setPIDParameters('P');
   } else if (pidChanged) {
-    D(Serial.println("PIDs gravados na EEPROM"));
     writePIDParameters();
     pidChanged = false;
   }
