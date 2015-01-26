@@ -25,7 +25,7 @@ String padding(String text, int size);
  * DEBUG *
  *********/
 
-#define DEBUG // Habilita a telemetria
+// #define DEBUG // Habilita a telemetria
 #ifdef DEBUG
   #define D(X) X
 #else
@@ -96,6 +96,7 @@ Quaternion q;        // [w, x, y, z]         Container do quaternion
 VectorFloat gravity; // [x, y, z]            Vetor de gravidade
 float ypr[3]; // [yaw, pitch, roll]   Container do yaw/pitch/roll e do vetor de gravidade
 double ypr_degree[3]; // [yaw, pitch, roll]   Container do yaw/pitch/roll e do vetor de gravidade em graus/segundo
+double yawRate; // Velocidade de rotação do eixo yaw
 
 const int DMP_YAW = 0;
 const int DMP_PITCH = 1;
@@ -150,9 +151,9 @@ double yaw_stab_output;
 
 /* PIDs para a taxa de estabilização. Entrada: posição do quadricóptero através do MPU. Objetivo: Posição indicada através do controle. Saída: Taxa de giro proporcional ao erro. */
 /*                        ENTRADA                 SAÍDA          OBJETIVO  P  I  D  DIREÇÃO */
-PID PIDPitchStab (&ypr_degree[DMP_PITCH], &pitch_stab_output, &rcPitch, 5, 1, 0, DIRECT);
-PID PIDRollStab  (&ypr_degree[DMP_ROLL],  &roll_stab_output,  &rcRoll,  5, 1, 0, DIRECT);
-PID PIDYawStab   (&ypr_degree[DMP_YAW],   &yaw_stab_output,   &rcYaw,   5, 1, 0, DIRECT);
+PID PIDPitchStab (&ypr_degree[DMP_PITCH], &pitch_stab_output,    &rcPitch, 5, 1, 0, DIRECT);
+PID PIDRollStab  (&ypr_degree[DMP_ROLL],  &roll_stab_output,     &rcRoll,  5, 1, 0, DIRECT);
+PID PIDYawStab   (       &yawRate,        &yaw_stab_output,      &rcYaw,   5, 1, 0, DIRECT); // No yaw, utilizará a taxa de rotação, não a posição como referência.
 
 /* Configuração dos endereços da EEPROM para armazenar os PIDs */
 const int EEPROM_PITCH_P = 0;
@@ -245,6 +246,8 @@ void loop() {
       yaw_target = ypr_degree[DMP_YAW];   // remember this yaw for when pilot stops
     }
 
+    yaw_stab_output = 0;
+    roll_stab_output = 0;
     motors[MOTOR_FL] = rcThrottle + roll_stab_output + pitch_stab_output - yaw_stab_output;
     motors[MOTOR_BL] = rcThrottle + roll_stab_output - pitch_stab_output + yaw_stab_output;
     motors[MOTOR_FR] = rcThrottle - roll_stab_output + pitch_stab_output + yaw_stab_output;
@@ -444,7 +447,7 @@ void writePIDParameters() {
 /* Efetua a calibração se a calibração estiver ativa (controle ON/OFF ligado) e grava a EEPROM ao final da calibração. Escolha do parâmetro de forma hard-coded. */
 void PIDCalibration() {
   if (rcOnOff > 10) {
-    setPIDParameters('P');
+    setPIDParameters('I');
   } else if (pidChanged) {
     writePIDParameters();
     pidChanged = false;
@@ -470,9 +473,9 @@ void normalizeRC() {
 
   /* Leva em consideração o zero do yaw controle */
   if (rcYaw > rcYawZero) {
-    rcYaw = map(channels[3], rcYawZero, MAX_RC_YAW, 0, 150);
+    rcYaw = map(channels[3], rcYawZero, MAX_RC_YAW, 0, 250);
   } else {
-    rcYaw = map(channels[3], MIN_RC_YAW, rcYawZero, -150, 0);
+    rcYaw = map(channels[3], MIN_RC_YAW, rcYawZero, -250, 0);
   }
 
   rcThrottle = channels[2];
@@ -569,6 +572,7 @@ void readOrientation() {
         mpu.dmpGetQuaternion(&q, fifoBuffer);
         mpu.dmpGetGravity(&gravity, &q);
         mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
+        yawRate = mpu.getRotationZ();
         // D(Serial.println("Fim lei"));
 
         /* Converte para graus/segundo */
