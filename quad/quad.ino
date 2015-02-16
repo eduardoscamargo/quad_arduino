@@ -25,7 +25,7 @@ String padding(String text, int size);
  * DEBUG *
  *********/
 
-// #define DEBUG // Habilita a telemetria
+#define DEBUG // Habilita a telemetria
 #ifdef DEBUG
   #define D(X) X
 #else
@@ -151,9 +151,9 @@ double yaw_stab_output;
 
 /* PIDs para a taxa de estabilização. Entrada: posição do quadricóptero através do MPU. Objetivo: Posição indicada através do controle. Saída: Taxa de giro proporcional ao erro. */
 /*                        ENTRADA                 SAÍDA          OBJETIVO  P  I  D  DIREÇÃO */
-PID PIDPitchStab (&ypr_degree[DMP_PITCH], &pitch_stab_output,    &rcPitch, 5, 1, 0, DIRECT);
-PID PIDRollStab  (&ypr_degree[DMP_ROLL],  &roll_stab_output,     &rcRoll,  5, 1, 0, DIRECT);
-PID PIDYawStab   (       &yawRate,        &yaw_stab_output,      &rcYaw,   5, 1, 0, DIRECT); // No yaw, utilizará a taxa de rotação, não a posição como referência.
+PID PIDPitchStab (&ypr_degree[DMP_PITCH], &pitch_stab_output,    &rcPitch, 10, 8, 0, REVERSE);
+PID PIDRollStab  (&ypr_degree[DMP_ROLL],  &roll_stab_output,     &rcRoll,  10, 8, 0, DIRECT);
+PID PIDYawStab   (       &yawRate,        &yaw_stab_output,      &rcYaw,   5, 0, 0, DIRECT); // No yaw, utilizará a taxa de rotação, não a posição como referência.
 
 /* Configuração dos endereços da EEPROM para armazenar os PIDs */
 const int EEPROM_PITCH_P = 0;
@@ -176,10 +176,10 @@ bool pidChanged = false;
  *************************/
 
 /* Canais de cada motor */
-const int MOTOR_PIN_FL = 9; /* To-do test this pin */
+const int MOTOR_PIN_FL = 9;
 const int MOTOR_PIN_FR = 10;
-const int MOTOR_PIN_BL = 11; /* To-do test this pin */
-const int MOTOR_PIN_BR = 12; /* To-do test this pin */
+const int MOTOR_PIN_BL = 11;
+const int MOTOR_PIN_BR = 12;
 
 /* Entidades que representam os motores.
  * Responsáveis por acionar os ESCs realizando um PPM entre 1ms e 2ms. */
@@ -221,6 +221,8 @@ void setup() {
 
 /* Loop infinito do Arduino. */
 void loop() {
+  unsigned long start = millis();
+
   static float yaw_target = 0;
 
   /* Se a programação do DMP falhou, não faz nada */
@@ -246,8 +248,11 @@ void loop() {
       yaw_target = ypr_degree[DMP_YAW];   // remember this yaw for when pilot stops
     }
 
-    yaw_stab_output = 0;
+    /* Debug */
+    pitch_stab_output = 0;
+    // yaw_stab_output = 0;
     roll_stab_output = 0;
+
     motors[MOTOR_FL] = rcThrottle + roll_stab_output + pitch_stab_output - yaw_stab_output;
     motors[MOTOR_BL] = rcThrottle + roll_stab_output - pitch_stab_output + yaw_stab_output;
     motors[MOTOR_FR] = rcThrottle - roll_stab_output + pitch_stab_output + yaw_stab_output;
@@ -268,16 +273,29 @@ void loop() {
   /* Pisca a led para indicar atividade */
   blinkState = !blinkState;
   digitalWrite(LED_PIN, blinkState);
+
+  unsigned long now = millis();
+  if (now - start < 60) {
+    delay(60 - (now - start));
+  }
 }
 
 /* Efetua a leitura dos canais dos controles. */
 void readRC() {
-  channels[0] = pulseIn(CH1, HIGH, 20000); /* Roll (horizontal da direita) */
-  channels[1] = pulseIn(CH2, HIGH, 20000); /* Pitch (vertical da direita) */
+  //channels[0] = pulseIn(CH1, HIGH, 20000); /* Roll (horizontal da direita) */
+  //channels[1] = pulseIn(CH2, HIGH, 20000); /* Pitch (vertical da direita) */
+  //channels[2] = pulseIn(CH3, HIGH, 20000); /* Throttle (vertical da esquerda) */
+  //channels[3] = pulseIn(CH4, HIGH, 20000); /* Yaw (horizontal da esquerda */
+  //channels[4] = pulseIn(CH5, HIGH, 20000); /* ON/OFF */
+  //channels[5] = pulseIn(CH6, HIGH, 20000); /* Dimmer */
+
+  channels[0] = 1500;
+  channels[1] = 1500;
   channels[2] = pulseIn(CH3, HIGH, 20000); /* Throttle (vertical da esquerda) */
-  channels[3] = pulseIn(CH4, HIGH, 20000); /* Yaw (horizontal da esquerda */
-  channels[4] = pulseIn(CH5, HIGH, 20000); /* ON/OFF */
-  channels[5] = pulseIn(CH6, HIGH, 20000); /* Dimmer */
+  channels[2] = 1500;
+  channels[3] = 1500;
+  channels[4] = 1000;
+  channels[5] = 1000;
 
   normalizeRC();
 }
@@ -355,7 +373,9 @@ void setupMotors() {
 /* Efetua o setup do PID */
 void setupPID() {
   /* Inicializa o PID */
-  getPIDParametersAndSetTunnings();
+  /* TODO: REMOVER COMENTÁRIO */
+  /* getPIDParametersAndSetTunnings(); */
+  /* END TODO */
 
   PIDPitchStab.SetMode(AUTOMATIC);
   PIDRollStab.SetMode(AUTOMATIC);
@@ -481,6 +501,11 @@ void normalizeRC() {
   rcThrottle = channels[2];
   rcOnOff    = map(channels[4], MIN_RC_ON_OFF, MAX_RC_ON_OFF, 0, 100);
   rcDimmer   = map(channels[5], MIN_RC_DIMMER, MAX_RC_DIMMER, 0, 255);
+
+  /* TODO: REMOVER */
+  rcRoll = rcPitch = rcYaw = 0;
+  rcThrottle = 1300;
+  /* END TODO */
 }
 
 /* Define os valores referentes ao zero do controle para Roll, Yaw e Pitch com base em 10 leituras do controle. */
@@ -503,11 +528,13 @@ void getZeroValuesFromRc() {
     rcYawZero += pulseIn(CH4, HIGH, 20000);
   }
   rcYawZero /= 10;
+
+  /* TODO: REMOVER */
+  rcRollZero = rcPitchZero = rcYawZero = 1500;
 }
 
 /* Efetua a escrita da potência dos motores entre 1ms e 2ms */
 void writeMotor() {
-  // int val = map(rcThrottle, MIN_RC_THROTTLE, MAX_RC_THROTTLE, 1000, 2000); /* To-do: trocar por constrain */
   motorFL.writeMicroseconds(constrain(motors[MOTOR_FL], 1000, 2000));
   motorFR.writeMicroseconds(constrain(motors[MOTOR_FR], 1000, 2000));
   motorBL.writeMicroseconds(constrain(motors[MOTOR_BL], 1000, 2000));
@@ -526,16 +553,13 @@ void readOrientation() {
 
     /* Obtém o byte INT_STATUS do MPU */
     mpuIntStatus = mpu.getIntStatus();
-    // D(Serial.println("getIntStatus: " + String(mpuIntStatus)));
 
     /* Obtém a contagem da FIFO */
     fifoCount = mpu.getFIFOCount();
-    // D(Serial.println("getFIFOCount: " + String(fifoCount)));
 
     /* Verifica se houve overflow da FIFO. Quanto mais ineficiente o código, mais irá ocorrer. */
     if ((mpuIntStatus & 0x10) || fifoCount == 1024) {
       // Reseta a FIFO
-      // D(Serial.println("resetFIFO: " + String(fifoCount)));
       mpu.resetFIFO();
       fifoOverflow = true;
       return;
@@ -554,17 +578,13 @@ void readOrientation() {
       fifoCount = mpu.getFIFOCount();
 
       /* Aguarda encher a FIFO caso não esteja com os todos dados completos (pacote completo) */
-      // Serial.println("Agu pac");
       int DMPwatchdog = 0;
       while (fifoCount < packetSize && DMPwatchdog < 5) {
         fifoCount = mpu.getFIFOCount();
-        // D(Serial.println("Count: " + String(fifoCount)));
         DMPwatchdog++;
       }
 
       if (DMPwatchdog < 5) {
-        // D(Serial.println("Pac rec...."));
-
         /* Dado está pronto para ser lido do MPU */
         mpu.getFIFOBytes(fifoBuffer, packetSize);
 
@@ -572,8 +592,7 @@ void readOrientation() {
         mpu.dmpGetQuaternion(&q, fifoBuffer);
         mpu.dmpGetGravity(&gravity, &q);
         mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
-        yawRate = mpu.getRotationZ();
-        // D(Serial.println("Fim lei"));
+        yawRate = mpu.getRotationZ()/16.4; // Precision FS_SEL = 3 -> 16.4/LSB/deg/s
 
         /* Converte para graus/segundo */
         for (int i = 0; i < 3; i++) {
@@ -586,22 +605,26 @@ void readOrientation() {
 
 /*
  * Efetua a telemetria dos dados do quadricoptero na seguinte ordem, separados por ';':
- * - rcThrottle (em us - entre ~1000 a ~2000)
- * - rcYaw    (entre -150 e 150)
- * - rcPitch  (entre -45 e 45)
- * - rcRoll   (entre -45 e 45)
- * - rcOnOff  (entre 0 e 100)
- * - rcDimmer (entre 0 e 1000)
- * - Posição: pitch (em graus)
- * - Posição: roll (em graus)
- * - Posição: yaw (em graus)
- * - Saída pitch do PID stab: pitch_stab_output (entre -500 a 500)
- * - Saída roll do PID stab: roll_stab_output (entre -500 a 500)
- * - Saída yaw do PID stab: yaw_stab_output (entre -500 a 500)
- * - Motor FL (em us - entre 1000 a 2000)
- * - Motor FR (em us - entre 1000 a 2000)
- * - Motor BL (em us - entre 1000 a 2000)
- * - Motor BR (em us - entre 1000 a 2000)
+ * - RCT - rcThrottle (em us - entre ~1000 a ~2000)
+ * - RCY - rcYaw    (entre -150 e 150)
+ * - RCP - rcPitch  (entre -45 e 45)
+ * - RCR - rcRoll   (entre -45 e 45)
+ * - RCO - rcOnOff  (entre 0 e 100)
+ * - RCD - rcDimmer (entre 0 e 1000)
+ * - ZRP - Posição 0 do Pitch no controle
+ * - ZRR - Posição 0 do Roll no controle
+ * - ZRY - Posição 0 do Pitch no controle
+ * - DMP - Posição: pitch (em graus)
+ * - DMR - Posição: roll (em graus)
+ * - DMY - Posição: yaw (em graus)
+ * - YRT - Taxa: yaw (em graus/seg)
+ * - PIP - Saída pitch do PID stab: pitch_stab_output (entre -500 a 500)
+ * - PIR - Saída roll do PID stab: roll_stab_output (entre -500 a 500)
+ * - PIY - Saída yaw do PID stab: yaw_stab_output (entre -500 a 500)
+ * - MFL - Motor FL (em us - entre 1000 a 2000)
+ * - MFR - Motor FR (em us - entre 1000 a 2000)
+ * - MBL - Motor BL (em us - entre 1000 a 2000)
+ * - MBR - Motor BR (em us - entre 1000 a 2000)
  * - Canal 1 (em us - entre ~1000 a ~2000)
  * - Canal 2 (em us - entre ~1000 a ~2000)
  * - Canal 3 (em us - entre ~1000 a ~2000)
@@ -627,7 +650,8 @@ D(void telemetry() {
   // tmValues += padding("ZRY=" + String(int(rcYawZero)), 9) + ";";
   tmValues += padding("DMP=" + String(int(ypr_degree[DMP_PITCH])), 9) + ";";
   tmValues += padding("DMR=" + String(int(ypr_degree[DMP_ROLL])), 9) + ";";
-  tmValues += padding("DMY=" + String(int(ypr_degree[DMP_YAW])), 9) + ";";
+  // tmValues += padding("DMY=" + String(int(ypr_degree[DMP_YAW])), 9) + ";";
+  tmValues += padding("YRT=" + String(int(yawRate)), 9) + ";";
   tmValues += padding("PIP=" + String(int(pitch_stab_output)), 8) + ";";
   tmValues += padding("PIR=" + String(int(roll_stab_output)), 8) + ";";
   tmValues += padding("PIY=" + String(int(yaw_stab_output)), 8) + ";";
@@ -635,10 +659,10 @@ D(void telemetry() {
   tmValues += padding("MFR=" + String(int(motors[MOTOR_FR])), 9) + ";";
   tmValues += padding("MBL=" + String(int(motors[MOTOR_BL])), 9) + ";";
   tmValues += padding("MBR=" + String(int(motors[MOTOR_BR])), 9) + ";";
-  tmValues += padding("INT=" + String(tmInterval), 11) + ";";
   // for (int i=0; i < 6; i++) {
   //  tmValues += padding(String(channels[i]), 8) + ";";
   // }
+  tmValues += padding("INT=" + String(tmInterval), 11) + ";";
 
   countToSend++;
   if (countToSend > 4) {
