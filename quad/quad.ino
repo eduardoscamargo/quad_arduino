@@ -4,13 +4,11 @@
 #include "I2Cdev.h"
 #include "MPU6050_6Axis_MotionApps20.h"
 #include "Wire.h"
+#include "controller.h"
 
-void setupRC();
 void setupMotors();
 void setupPID();
 void setupMPU();
-void readRC();
-void normalizeRC();
 void readOrientation();
 void writeMotor();
 void telemetry();
@@ -44,29 +42,8 @@ bool blinkState = false;
 
 /******************************
  * Entrada do controle remoto *
- ******************************/
-
-/* Definição dos canais de entrada. */
-const int CH1 = 8; /* Roll (horizontal da direita) */
-const int CH2 = 3; /* Pitch (vertical da direita) */
-const int CH3 = 4; /* Throttle (vertical da esquerda) */
-const int CH4 = 5; /* Yaw (horizontal da esquerda */
-const int CH5 = 6; /* ON/OFF */
-const int CH6 = 7; /* Dimmer */
-
-/* Valores máximos e mínimos (em us) de cada canal. */
-const int MAX_RC_ROLL = 1939;
-const int MIN_RC_ROLL = 1040;
-const int MAX_RC_PITCH = 2009;
-const int MIN_RC_PITCH = 1012;
-const int MAX_RC_THROTTLE = 1950;
-const int MIN_RC_THROTTLE = 1070;
-const int MIN_RC_YAW = 1030;
-const int MAX_RC_YAW = 2009;
-const int MAX_RC_ON_OFF = 2009;
-const int MIN_RC_ON_OFF = 1014;
-const int MAX_RC_DIMMER = 1018;
-const int MIN_RC_DIMMER = 2006;
+ *****************************/
+uint8_t pins[NUM_CHANNELS] = {A8, A9, A10, A11, A12, A13};
 
 /* Valores médios para roll, pitch e yaw */
 unsigned long rcRollZero, rcPitchZero, rcYawZero = 0;
@@ -74,13 +51,15 @@ unsigned long rcRollZero, rcPitchZero, rcYawZero = 0;
 /* Armazena a duração dos canais do controle (em us). */
 unsigned long channels[6];
 
+/* Marca o momento em que começou a contagem do tempo. */
+volatile int chvalue[NUM_CHANNELS] = { 0, 0, 0, 0, 0, 0 };
+
 /* Valores normalizados dos canais */
 double rcThrottle, rcYaw, rcPitch, rcRoll, rcOnOff, rcDimmer;
 
 /**************************************
  * Giroscópio e Acelerômetro: MPU6050 *
  **************************************/
-
 /* Variáveis de controle do MPU6050 (só MPU para facilitar) para a interface
  * com o DMP - Processador que entrega valor prontos do giroscópio. */
 MPU6050 mpu;            // Entidade que representa o MPU
@@ -92,11 +71,11 @@ uint16_t fifoCount;     // Conta quantos bytes há no FIFO
 uint8_t fifoBuffer[64]; // FIFO do DMP
 
 /* Variáveis de orientação que vem do DMP */
-Quaternion q;        // [w, x, y, z]         Container do quaternion
-VectorFloat gravity; // [x, y, z]            Vetor de gravidade
-float ypr[3]; // [yaw, pitch, roll]   Container do yaw/pitch/roll e do vetor de gravidade
+Quaternion q;         // [w, x, y, z]         Container do quaternion
+VectorFloat gravity;  // [x, y, z]            Vetor de gravidade
+float ypr[3];         // [yaw, pitch, roll]   Container do yaw/pitch/roll e do vetor de gravidade
 double ypr_degree[3]; // [yaw, pitch, roll]   Container do yaw/pitch/roll e do vetor de gravidade em graus/segundo
-double yawRate; // Velocidade de rotação do eixo yaw
+double yawRate;       // Velocidade de rotação do eixo yaw
 
 const int DMP_YAW = 0;
 const int DMP_PITCH = 1;
@@ -151,8 +130,8 @@ double yaw_stab_output;
 
 /* PIDs para a taxa de estabilização. Entrada: posição do quadricóptero através do MPU. Objetivo: Posição indicada através do controle. Saída: Taxa de giro proporcional ao erro. */
 /*                        ENTRADA                 SAÍDA          OBJETIVO  P  I  D  DIREÇÃO */
-PID PIDPitchStab (&ypr_degree[DMP_PITCH], &pitch_stab_output,    &rcPitch, 10, 8, 0, REVERSE);
-PID PIDRollStab  (&ypr_degree[DMP_ROLL],  &roll_stab_output,     &rcRoll,  10, 8, 0, DIRECT);
+PID PIDPitchStab (&ypr_degree[DMP_PITCH], &pitch_stab_output,    &rcPitch, 4.7, 6, 1.1, REVERSE);
+PID PIDRollStab  (&ypr_degree[DMP_ROLL],  &roll_stab_output,     &rcRoll,  10, 0, 0, DIRECT);
 PID PIDYawStab   (       &yawRate,        &yaw_stab_output,      &rcYaw,   5, 0, 0, DIRECT); // No yaw, utilizará a taxa de rotação, não a posição como referência.
 
 /* Configuração dos endereços da EEPROM para armazenar os PIDs */
@@ -202,7 +181,8 @@ void setup() {
   D(while (Serial.available() && Serial.read())); // Limpa o buffer
 
   D(Serial.println("Iniciando controle remoto"));
-  setupRC();
+  // setupRC();
+  initRadio();
 
   D(Serial.println("Iniciando motores"));
   setupMotors();
@@ -232,7 +212,23 @@ void loop() {
 
   readOrientation();
 
-  readRC();
+  // readRC();
+
+  if (detectLostSignal()) {
+    Serial.println("Perda de sinal do RC!");
+  } else {
+    String val1;
+    for (int i=0; i < 6; i++) {
+     val1 += padding(String(channels[i]), 8) + ";";
+    }
+
+    String val2;
+    for (int i=0; i < 6; i++) {
+     val2 += padding(String(chvalue[i]), 8) + ";";
+    }
+    // Serial.println("Valores do controle Ant: " + val1);
+    Serial.println("Valores do controle Nov: " + val2);
+  }
 
   PIDCalibration();
 
@@ -249,8 +245,8 @@ void loop() {
     }
 
     /* Debug */
-    pitch_stab_output = 0;
-    // yaw_stab_output = 0;
+    // pitch_stab_output = 0;
+    yaw_stab_output = 0;
     roll_stab_output = 0;
 
     motors[MOTOR_FL] = rcThrottle + roll_stab_output + pitch_stab_output - yaw_stab_output;
@@ -280,25 +276,6 @@ void loop() {
   }
 }
 
-/* Efetua a leitura dos canais dos controles. */
-void readRC() {
-  //channels[0] = pulseIn(CH1, HIGH, 20000); /* Roll (horizontal da direita) */
-  //channels[1] = pulseIn(CH2, HIGH, 20000); /* Pitch (vertical da direita) */
-  //channels[2] = pulseIn(CH3, HIGH, 20000); /* Throttle (vertical da esquerda) */
-  //channels[3] = pulseIn(CH4, HIGH, 20000); /* Yaw (horizontal da esquerda */
-  //channels[4] = pulseIn(CH5, HIGH, 20000); /* ON/OFF */
-  //channels[5] = pulseIn(CH6, HIGH, 20000); /* Dimmer */
-
-  channels[0] = 1500;
-  channels[1] = 1500;
-  channels[2] = pulseIn(CH3, HIGH, 20000); /* Throttle (vertical da esquerda) */
-  channels[2] = 1500;
-  channels[3] = 1500;
-  channels[4] = 1000;
-  channels[5] = 1000;
-
-  normalizeRC();
-}
 
 /* Obtem os valores dos PIDs da EEPROM */
 void getPIDParametersAndSetTunnings() {
@@ -339,20 +316,6 @@ void getPIDParametersAndSetTunnings() {
   D(Serial.print(String(tempString) + ", "));
   D(dtostrf(pidParams.PIDYawStab.kd, 2, 1, tempString));
   D(Serial.println(String(tempString) + ")"));
-}
-
-/* Efetua o setup do controle remoto */
-void setupRC() {
-  /* Bind dos canais de entrada do controle */
-  pinMode(CH1, INPUT);
-  pinMode(CH2, INPUT);
-  pinMode(CH3, INPUT);
-  pinMode(CH5, INPUT);
-  pinMode(CH4, INPUT);
-  pinMode(CH6, INPUT);
-
-  /* Zera os valores do Pitch, Roll e Yaw */
-  getZeroValuesFromRc();
 }
 
 /* Efetua o setup dos motores */
@@ -474,40 +437,6 @@ void PIDCalibration() {
   }
 }
 
-/* Normaliza os valores do controle para ranges pré definidos. */
-void normalizeRC() {
-
-  /* Leva em consideração o zero do roll controle */
-  if (rcRoll > rcRollZero) {
-    rcRoll = map(channels[0], rcRollZero, MAX_RC_ROLL, 0, 45);
-  } else {
-    rcRoll = map(channels[0], MIN_RC_ROLL, rcRollZero, -45, 0);
-  }
-
-  /* Leva em consideração o zero do roll controle */
-  if (rcPitch > rcRollZero) {
-    rcPitch = map(channels[1], rcPitchZero, MAX_RC_PITCH, 0, 45);
-  } else {
-    rcPitch = map(channels[1], MIN_RC_PITCH, rcPitchZero, -45, 0);
-  }
-
-  /* Leva em consideração o zero do yaw controle */
-  if (rcYaw > rcYawZero) {
-    rcYaw = map(channels[3], rcYawZero, MAX_RC_YAW, 0, 250);
-  } else {
-    rcYaw = map(channels[3], MIN_RC_YAW, rcYawZero, -250, 0);
-  }
-
-  rcThrottle = channels[2];
-  rcOnOff    = map(channels[4], MIN_RC_ON_OFF, MAX_RC_ON_OFF, 0, 100);
-  rcDimmer   = map(channels[5], MIN_RC_DIMMER, MAX_RC_DIMMER, 0, 255);
-
-  /* TODO: REMOVER */
-  rcRoll = rcPitch = rcYaw = 0;
-  rcThrottle = 1300;
-  /* END TODO */
-}
-
 /* Define os valores referentes ao zero do controle para Roll, Yaw e Pitch com base em 10 leituras do controle. */
 void getZeroValuesFromRc() {
 
@@ -530,7 +459,7 @@ void getZeroValuesFromRc() {
   rcYawZero /= 10;
 
   /* TODO: REMOVER */
-  rcRollZero = rcPitchZero = rcYawZero = 1500;
+  rcRollZero = rcYawZero = 1500;
 }
 
 /* Efetua a escrita da potência dos motores entre 1ms e 2ms */
@@ -666,10 +595,10 @@ D(void telemetry() {
 
   countToSend++;
   if (countToSend > 4) {
-    Serial.println(tmValues);
+    // Serial.println(tmValues);
     countToSend = 0;
   }
-}
+})
 
 /* Cria padding em uma string preenchendo-a com espaços à direita */
 String padding(String text, int size){
@@ -681,4 +610,4 @@ String padding(String text, int size){
   }
 
   return newString;
-})
+}
