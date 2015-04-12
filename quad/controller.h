@@ -7,12 +7,20 @@
 #define NUM_CHANNELS 6
 
 /* Definição dos canais de entrada. */
-#define CH1 8 /* Roll (horizontal da direita) */
-#define CH2 3 /* Pitch (vertical da direita) */
-#define CH3 4 /* Throttle (vertical da esquerda) */
-#define CH4 5 /* Yaw (horizontal da esquerda */
-#define CH5 6 /* ON/OFF */
-#define CH6 7 /* Dimmer */
+#define CH1 A8  /* Roll (horizontal da direita) */
+#define CH2 A13 /* Pitch (vertical da direita) */
+#define CH3 A12 /* Throttle (vertical da esquerda) */
+#define CH4 A11 /* Yaw (horizontal da esquerda */
+#define CH5 A10 /* ON/OFF */
+#define CH6 A9  /* Dimmer */
+
+/* Posição dos canais no vetor 'chvalues' */
+#define CH_ROLL     0
+#define CH_PITCH    1
+#define CH_THROTTLE 2
+#define CH_YAW      3
+#define CH_ON_OFF   4
+#define CH_DIMMER   5
 
 /* Valores máximos e mínimos (em us) de cada canal. */
 #define MAX_RC_ROLL     1939
@@ -28,12 +36,10 @@
 #define MAX_RC_DIMMER   1018
 #define MIN_RC_DIMMER   2006
 
-void readRC();
-void normalizeRC();
-void setupRC();
-void initRadio();
+void setupRadio();
 void chrising();
 void chfalling();
 int indexFromPin(int pin);
+void normalizeRC();
 
 #endif

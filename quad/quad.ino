@@ -12,7 +12,7 @@ void setupMPU();
 void readOrientation();
 void writeMotor();
 void telemetry();
-void getZeroValuesFromRc();
+void getZeroValuesFromRC();
 void getPIDParametersAndSetTunnings();
 void setPIDParameters(char param);
 void writePIDParameters();
@@ -22,7 +22,6 @@ String padding(String text, int size);
 /*********
  * DEBUG *
  *********/
-
 #define DEBUG // Habilita a telemetria
 #ifdef DEBUG
   #define D(X) X
@@ -43,16 +42,14 @@ bool blinkState = false;
 /******************************
  * Entrada do controle remoto *
  *****************************/
-uint8_t pins[NUM_CHANNELS] = {A8, A9, A10, A11, A12, A13};
+/* Armazena a duração dos canais do controle (em us). */
+volatile unsigned int chvalue[NUM_CHANNELS] = { 0, 0, 0, 0, 0, 0 };
+
+/* Indica quantas leituras houve no canal CH3 */
+volatile unsigned long RCreadCount = 0;
 
 /* Valores médios para roll, pitch e yaw */
 unsigned long rcRollZero, rcPitchZero, rcYawZero = 0;
-
-/* Armazena a duração dos canais do controle (em us). */
-unsigned long channels[6];
-
-/* Marca o momento em que começou a contagem do tempo. */
-volatile int chvalue[NUM_CHANNELS] = { 0, 0, 0, 0, 0, 0 };
 
 /* Valores normalizados dos canais */
 double rcThrottle, rcYaw, rcPitch, rcRoll, rcOnOff, rcDimmer;
@@ -181,8 +178,8 @@ void setup() {
   D(while (Serial.available() && Serial.read())); // Limpa o buffer
 
   D(Serial.println("Iniciando controle remoto"));
-  // setupRC();
-  initRadio();
+  setupRadio();
+  getZeroValuesFromRC();
 
   D(Serial.println("Iniciando motores"));
   setupMotors();
@@ -210,25 +207,11 @@ void loop() {
     return;
   }
 
+  detectLostSignal();
+
   readOrientation();
 
-  // readRC();
-
-  if (detectLostSignal()) {
-    Serial.println("Perda de sinal do RC!");
-  } else {
-    String val1;
-    for (int i=0; i < 6; i++) {
-     val1 += padding(String(channels[i]), 8) + ";";
-    }
-
-    String val2;
-    for (int i=0; i < 6; i++) {
-     val2 += padding(String(chvalue[i]), 8) + ";";
-    }
-    // Serial.println("Valores do controle Ant: " + val1);
-    Serial.println("Valores do controle Nov: " + val2);
-  }
+  normalizeRC();
 
   PIDCalibration();
 
@@ -438,28 +421,31 @@ void PIDCalibration() {
 }
 
 /* Define os valores referentes ao zero do controle para Roll, Yaw e Pitch com base em 10 leituras do controle. */
-void getZeroValuesFromRc() {
+void getZeroValuesFromRC() {
+  unsigned long currentRCreadCount = 0;
+  int passes = 0;
 
-  /* Roll (horizontal da direita) */
-  for (int i = 0; i < 10; i++) {
-    rcRollZero += pulseIn(CH1, HIGH, 20000);
+  currentRCreadCount = RCreadCount;
+
+  while (passes < 100) {
+    /* Aguarda acontecer a leitura do controle. */
+    while ((currentRCreadCount == RCreadCount) || !chvalue[CH_ROLL] || !chvalue[CH_PITCH] || !chvalue[CH_YAW]);
+
+    currentRCreadCount = RCreadCount;
+
+    rcRollZero += chvalue[CH_ROLL];
+    rcPitchZero += chvalue[CH_PITCH];
+    rcYawZero += chvalue[CH_YAW];
+
+    passes++;
+
+    /* TODO: REMOVER */
+    // rcRollZero = rcYawZero = 1500;
   }
-  rcRollZero /= 10;
 
-  /* Pitch (vertical da direita) */
-  for (int i = 0; i < 10; i++) {
-    rcPitchZero += pulseIn(CH2, HIGH, 20000);
-  }
-  rcPitchZero /= 10;
-
-  /* Yaw (horizontal da esquerda */
-  for (int i = 0; i < 10; i++) {
-    rcYawZero += pulseIn(CH4, HIGH, 20000);
-  }
-  rcYawZero /= 10;
-
-  /* TODO: REMOVER */
-  rcRollZero = rcYawZero = 1500;
+  rcRollZero /= passes;
+  rcPitchZero /= passes;
+  rcYawZero /= passes;
 }
 
 /* Efetua a escrita da potência dos motores entre 1ms e 2ms */
@@ -595,7 +581,7 @@ D(void telemetry() {
 
   countToSend++;
   if (countToSend > 4) {
-    // Serial.println(tmValues);
+    Serial.println(tmValues);
     countToSend = 0;
   }
 })
