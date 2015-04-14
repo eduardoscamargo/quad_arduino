@@ -41,5 +41,6 @@ void chrising();
 void chfalling();
 int indexFromPin(int pin);
 void normalizeRC();
+void getZeroValuesFromRC();
 
 #endif

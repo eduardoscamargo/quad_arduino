@@ -114,3 +114,31 @@ void normalizeRC() {
   // rcRoll = rcYaw = 0;
   /* END TODO */
 }
+
+/* Define os valores referentes ao zero do controle para Roll, Yaw e Pitch com base em 10 leituras do controle. */
+void getZeroValuesFromRC() {
+  unsigned long currentRCreadCount = 0;
+  int passes = 0;
+
+  currentRCreadCount = RCreadCount;
+
+  while (passes < 100) {
+    /* Aguarda acontecer a leitura do controle. */
+    while ((currentRCreadCount == RCreadCount) || !chvalue[CH_ROLL] || !chvalue[CH_PITCH] || !chvalue[CH_YAW]);
+
+    currentRCreadCount = RCreadCount;
+
+    rcRollZero += chvalue[CH_ROLL];
+    rcPitchZero += chvalue[CH_PITCH];
+    rcYawZero += chvalue[CH_YAW];
+
+    passes++;
+
+    /* TODO: REMOVER */
+    // rcRollZero = rcYawZero = 1500;
+  }
+
+  rcRollZero /= passes;
+  rcPitchZero /= passes;
+  rcYawZero /= passes;
+}
