@@ -2,6 +2,7 @@
 
 uint8_t mpuIntStatus;   // Armazena o valor atual do byte de status de interrupção do MPU
 uint16_t packetSize;    // Tamanho esperado do pacote do DMP (o padrão é 42 bytes)
+uint16_t fifoCount;     // Conta quantos bytes há no FIFO
 
 /* Efetua o setup do MPU6050 */
 void setupMPU() {
@@ -50,7 +51,6 @@ void setupMPU() {
 
 /* Efetua a leitura da orientação a ser armazenada na variável "ypr" */
 void readOrientation() {
-  uint16_t fifoCount;     // Conta quantos bytes há no FIFO
   uint8_t fifoBuffer[64]; // FIFO do DMP
 
   /* Variáveis de orientação que vem do DMP */
@@ -61,7 +61,8 @@ void readOrientation() {
   bool fifoOverflow = false; // Marca se houve overflow da FIFO durante a execução
 
   /* Le somente se houve interrupção */
-  if (mpuInterrupt) {
+  if (mpuInterrupt || fifoCount >= packetSize) {
+
     /* Reseta a flag de interrupção */
     mpuInterrupt = false;
 
@@ -71,10 +72,12 @@ void readOrientation() {
     /* Obtém o byte INT_STATUS do MPU */
     mpuIntStatus = mpu.getIntStatus();
 
+    // D(Serial.print(String(fifoCount) + "; " + String(mpuIntStatus) + "; "));
     /* Verifica se houve overflow da FIFO. Quanto mais ineficiente o código, mais irá ocorrer. */
     if ((mpuIntStatus & 0x10) || fifoCount == 1024) {
-      Serial.println("Overflow");
+      D(Serial.println("Overflow"));
       // Reseta a FIFO
+      fifoCount = 0;
       mpu.resetFIFO();
       fifoOverflow = true;
       return;
@@ -84,22 +87,26 @@ void readOrientation() {
       /* Aguarda encher a FIFO caso não esteja com os todos dados completos (pacote completo) */
       while (fifoCount < packetSize) {
         fifoCount = mpu.getFIFOCount();
-        Serial.println("Aguardando FIFO");
+        D(Serial.println("Aguardando FIFO"));
       }
 
       /* Dado está pronto para ser lido do MPU */
       mpu.getFIFOBytes(fifoBuffer, packetSize);
+      fifoCount -= packetSize;
 
       /* Obtém os valores (Yaw, Pitch e Roll) do DMP */
       mpu.dmpGetQuaternion(&q, fifoBuffer);
       mpu.dmpGetGravity(&gravity, &q);
       mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
+
       yawRate = mpu.getRotationZ()/16.4; // Precision FS_SEL = 3 -> 16.4/LSB/deg/s
 
-      /* Converte para graus/segundo */
+      /* Converte para graus */
       for (int i = 0; i < 3; i++) {
         ypr_degree[i] = ypr[i] * 180/M_PI;
       }
+
+      // D(Serial.println(String(ypr_degree[DMP_PITCH]) + "; "));
     }
   }
 }

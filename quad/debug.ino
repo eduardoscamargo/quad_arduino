@@ -29,38 +29,39 @@
  * - Intervalo do loop (em us)
  */
 D(void telemetry() {
-  /* Calcula a frequência do loop */
-  tmInterval = micros() - tmCheckpoint;
-  tmCheckpoint = micros();
-
-  String tmValues;
-  tmValues += padding("RCT=" + String(int(rcThrottle)), 9) + ";";
-  tmValues += padding("RCY=" + String(int(rcYaw)), 8) + ";";
-  tmValues += padding("RCP=" + String(int(rcPitch)), 8) + ";";
-  tmValues += padding("RCR=" + String(int(rcRoll)), 8) + ";";
-  tmValues += padding("RCO=" + String(int(rcOnOff)), 8) + ";";
-  tmValues += padding("RCD=" + String(int(rcDimmer)), 8) + ";";
-  // tmValues += padding("ZRP=" + String(int(rcPitchZero)), 9) + ";";
-  // tmValues += padding("ZRR=" + String(int(rcRollZero)), 9) + ";";
-  // tmValues += padding("ZRY=" + String(int(rcYawZero)), 9) + ";";
-  tmValues += padding("DMP=" + String(int(ypr_degree[DMP_PITCH])), 9) + ";";
-  tmValues += padding("DMR=" + String(int(ypr_degree[DMP_ROLL])), 9) + ";";
-  // tmValues += padding("DMY=" + String(int(ypr_degree[DMP_YAW])), 9) + ";";
-  tmValues += padding("YRT=" + String(int(yawRate)), 9) + ";";
-  tmValues += padding("PIP=" + String(int(pitch_stab_output)), 8) + ";";
-  tmValues += padding("PIR=" + String(int(roll_stab_output)), 8) + ";";
-  tmValues += padding("PIY=" + String(int(yaw_stab_output)), 8) + ";";
-  tmValues += padding("MFL=" + String(int(motors[MOTOR_FL])), 9) + ";";
-  tmValues += padding("MFR=" + String(int(motors[MOTOR_FR])), 9) + ";";
-  tmValues += padding("MBL=" + String(int(motors[MOTOR_BL])), 9) + ";";
-  tmValues += padding("MBR=" + String(int(motors[MOTOR_BR])), 9) + ";";
-  // for (int i=0; i < 6; i++) {
-  //  tmValues += padding(String(channels[i]), 8) + ";";
-  // }
-  tmValues += padding("INT=" + String(tmInterval), 11) + ";";
-
   countToSend++;
   if (countToSend > 20) {
+
+    /* Calcula a frequência do loop */
+    tmInterval = micros() - tmCheckpoint;
+    tmCheckpoint = micros();
+
+    String tmValues;
+    // tmValues += padding("RCT=" + String(int(rcThrottle)), 9) + ";";
+    // tmValues += padding("RCY=" + String(int(rcYaw)), 8) + ";";
+    // tmValues += padding("RCP=" + String(int(rcPitch)), 8) + ";";
+    // tmValues += padding("RCR=" + String(int(rcRoll)), 8) + ";";
+    // tmValues += padding("RCO=" + String(int(rcOnOff)), 8) + ";";
+    // tmValues += padding("RCD=" + String(int(rcDimmer)), 8) + ";";
+    // tmValues += padding("ZRP=" + String(int(rcPitchZero)), 9) + ";";
+    // tmValues += padding("ZRR=" + String(int(rcRollZero)), 9) + ";";
+    // tmValues += padding("ZRY=" + String(int(rcYawZero)), 9) + ";";
+    tmValues += padding("DMP=" + String(int(ypr_degree[DMP_PITCH])), 9) + ";";
+    tmValues += padding("DMR=" + String(int(ypr_degree[DMP_ROLL])), 9) + ";";
+    // tmValues += padding("DMY=" + String(int(ypr_degree[DMP_YAW])), 9) + ";";
+    tmValues += padding("YRT=" + String(int(yawRate)), 9) + ";";
+    tmValues += padding("PIP=" + String(int(pitch_stab_output)), 8) + ";";
+    // tmValues += padding("PIR=" + String(int(roll_stab_output)), 8) + ";";
+    // tmValues += padding("PIY=" + String(int(yaw_stab_output)), 8) + ";";
+    // tmValues += padding("MFL=" + String(int(motors[MOTOR_FL])), 9) + ";";
+    // tmValues += padding("MFR=" + String(int(motors[MOTOR_FR])), 9) + ";";
+    // tmValues += padding("MBL=" + String(int(motors[MOTOR_BL])), 9) + ";";
+    // tmValues += padding("MBR=" + String(int(motors[MOTOR_BR])), 9) + ";";
+    // for (int i=0; i < 6; i++) {
+    //  tmValues += padding(String(channels[i]), 8) + ";";
+    // }
+    tmValues += padding("INT=" + String(tmInterval), 11) + ";";
+
     Serial.println(tmValues);
     countToSend = 0;
   }

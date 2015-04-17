@@ -42,5 +42,6 @@ void chfalling();
 int indexFromPin(int pin);
 void normalizeRC();
 void getZeroValuesFromRC();
+bool detectLostSignal();
 
 #endif

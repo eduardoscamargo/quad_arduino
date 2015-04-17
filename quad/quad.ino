@@ -1,5 +1,5 @@
+/* Motors */
 #include <Servo.h>
-#include <EEPROM.h>
 
 /* MPU6050 */
 #include "I2Cdev.h"
@@ -8,7 +8,9 @@
 
 /* PID */
 #include <PID_v1.h>
+#include <EEPROM.h>
 
+/* Custom */
 #include "controller.h"
 #include "mpu6050.h"
 #include "pid.h"
@@ -33,6 +35,9 @@
 /* Indicação de atividade do processador */
 const int LED_PIN = 13;
 bool blinkState = false;
+
+/* Controla o tempo do loop. */
+unsigned long before;
 
 /******************************
  * Entrada do controle remoto *
@@ -105,7 +110,6 @@ bool pidChanged = false;
 /* Motores (parte lógica) */
 int motors[4];
 
-int teeeeemp = 0;
 /* Inicialização do Arduino. */
 void setup() {
   /* Inicializa a porta serial */
@@ -133,6 +137,7 @@ void setup() {
 
 /* Loop infinito do Arduino. */
 void loop() {
+  before = millis();
   static float yaw_target = 0;
 
   /* Se a programação do DMP falhou, não faz nada */
@@ -149,7 +154,7 @@ void loop() {
   PIDCalibration();
 
   /* Voe Forest, Voe! */
-  if(rcThrottle > MIN_RC_THROTTLE + 100) {  // Throttle raised, turn on stablisation.
+  if (rcThrottle > (MIN_RC_THROTTLE + 100)) {  // Throttle raised, turn on stablisation.
     PIDPitchStab.Compute();
     PIDRollStab.Compute();
     PIDYawStab.Compute();
@@ -185,4 +190,8 @@ void loop() {
   /* Pisca a led para indicar atividade */
   blinkState = !blinkState;
   digitalWrite(LED_PIN, blinkState);
+
+  while (millis() - before < 10) {
+    readOrientation();
+  }
 }

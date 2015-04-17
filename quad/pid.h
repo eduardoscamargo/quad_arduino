@@ -36,5 +36,6 @@ void setupPID();
 void getPIDParametersAndSetTunnings();
 void setPIDParameters(char param);
 void writePIDParameters();
+void PIDCalibration();
 
 #endif
