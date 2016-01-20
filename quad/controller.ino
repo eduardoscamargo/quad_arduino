@@ -101,9 +101,9 @@ void normalizeRC() {
 
   /* Leva em consideração o zero do yaw controle */
   if (rcYaw > rcYawZero) {
-    rcYaw = map(chvalue[3], rcYawZero, MAX_RC_YAW, 0, 250);
+    rcYaw = map(chvalue[3], rcYawZero, MAX_RC_YAW, 0, 30);
   } else {
-    rcYaw = map(chvalue[3], MIN_RC_YAW, rcYawZero, -250, 0);
+    rcYaw = map(chvalue[3], MIN_RC_YAW, rcYawZero, -30, 0);
   }
 
   rcThrottle = chvalue[2];
@@ -111,7 +111,7 @@ void normalizeRC() {
   rcDimmer   = map(chvalue[5], MIN_RC_DIMMER, MAX_RC_DIMMER, 0, 255);
 
   /* TODO: REMOVER */
-  // rcRoll = rcYaw = 0;
+  rcRoll = rcPitch = 0;
   /* END TODO */
 }
 

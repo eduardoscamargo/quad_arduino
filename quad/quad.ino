@@ -19,7 +19,7 @@
 /*********
  * DEBUG *
  *********/
-#define DEBUG // Habilita a telemetria
+// #define DEBUG // Habilita a telemetria
 #ifdef DEBUG
   #define D(X) X
 #else
@@ -96,8 +96,8 @@ double yaw_stab_output;
 
 /* PIDs para a taxa de estabilização. Entrada: posição do quadricóptero através do MPU. Objetivo: Posição indicada através do controle. Saída: Taxa de giro proporcional ao erro. */
 /*                        ENTRADA                 SAÍDA          OBJETIVO  P  I  D  DIREÇÃO */
-PID PIDPitchStab (&ypr_degree[DMP_PITCH], &pitch_stab_output,    &rcPitch, 4.7, 6, 1.1, REVERSE);
-PID PIDRollStab  (&ypr_degree[DMP_ROLL],  &roll_stab_output,     &rcRoll,  10, 0, 0, DIRECT);
+PID PIDPitchStab (&ypr_degree[DMP_PITCH], &pitch_stab_output,    &rcPitch, 4, 1, 0.6, REVERSE); /* 1.8, 0.1, 0 */
+PID PIDRollStab  (&ypr_degree[DMP_ROLL],  &roll_stab_output,     &rcRoll,  4, 1, 0.6, DIRECT);   /* 1.8, 0.1, 0 */
 PID PIDYawStab   (       &yawRate,        &yaw_stab_output,      &rcYaw,   5, 0, 0, DIRECT); // No yaw, utilizará a taxa de rotação, não a posição como referência.
 
 /* Variável que indica se houve calibração. Se houve e finalizou, grava a EEPROM. */
@@ -165,10 +165,10 @@ void loop() {
       yaw_target = ypr_degree[DMP_YAW];   // remember this yaw for when pilot stops
     }
 
-    /* Debug */
+    /* TODO - REMOVER */
     // pitch_stab_output = 0;
-    yaw_stab_output = 0;
-    roll_stab_output = 0;
+    // yaw_stab_output = 0;
+    // roll_stab_output = 0;
 
     motors[MOTOR_FL] = rcThrottle + roll_stab_output + pitch_stab_output - yaw_stab_output;
     motors[MOTOR_BL] = rcThrottle + roll_stab_output - pitch_stab_output + yaw_stab_output;
